@@ -1,0 +1,345 @@
+---
+title: "Pretest HUPS"
+author: "Chris Harris"
+date: "Last edited: `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<!-- Style definitions -->
+<style type="text/css">
+h1.title {
+  text-align: center;
+}
+h4.author {
+  text-align: center;
+}
+h4.date {
+  text-align: center;
+}
+</style>
+
+```{r init, include=FALSE}
+### Setup----
+# Dependencies
+if (!require(needs)) {install.packages("needs"); library(needs)}
+if (!require(goallabr)) {
+  if (!require(devtools)) {install.packages("devtools"); library(devtools)}
+  install_github("chrisharrisUU/goallabr")
+}
+needs(BayesFactor, dplyr, ggplot2, goallabr, gridExtra,
+      here, kableExtra, magrittr, tidyr, papaja, purrr)
+prioritize(dplyr)
+
+source(here("Auxiliary/HUPS1_init.R"))
+
+### Functions----
+
+
+### Canonical sorting----
+df1 <- do_counterbalance(df1)
+```
+
+#   {.tabset .tabset-fade}
+
+## Frequency
+
+
+*Which of these two people did you encounter more often?*
+
+[image left] [image right]
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+```{r, include=FALSE}
+freq_long <- df1 %>%
+  select(freq_rich, freq_imp, participant.id) %>%
+  gather(key = "cond",
+         value = "freq",
+         c(freq_rich, freq_imp)) %>%
+  mutate(cond = ifelse(cond == "freq_rich", "rich", "imp")) %>%
+  mutate(cond = factor(cond, levels = c("rich", "imp"))) %>%
+  mutate(freq = ifelse(freq == 1, freq, 0))
+```
+
+
+Most people correctly identify which person was shown more frequently. Only on three instances did participants get this wrong:
+
+```{r}
+freq_long %>%
+  filter(freq == 0) %>%
+  knitr::kable(caption = "Instances in which frequency is wrong", digits = 2) %>%
+  kable_styling(bootstrap_options = "hover", full_width = F, position = "center")
+```
+
+Here the percentage scores of correct instances per condition:
+
+```{r}
+freq_long %>%
+  group_by(cond) %>%
+  summarize(avg = mean(freq)) %>%
+  knitr::kable(caption = "Instances correctly identified", digits = 2) %>%
+  kable_styling(bootstrap_options = "hover", full_width = F, position = "center")
+```
+
+
+These do not differ from one another:
+
+```{r, results='asis'}
+distr <- table(freq_long$cond, freq_long$freq)
+
+testBF <- proportionBF(y = distr["rich", "1"],
+             N = distr["rich", "1"] + distr["rich", "0"],
+             p = distr["imp", "1"] / (distr["imp", "1"] + distr["imp", "0"]),
+             rscale = "ultrawide",
+             nullInterval = c(0, 1)) %>%
+  printBFb(print = TRUE)
+testFR <- binom.test(x = distr["rich", "1"],
+           n = distr["rich", "1"] + distr["rich", "0"],
+           p = distr["imp", "1"] / (distr["imp", "1"] + distr["imp", "0"]),
+           alternative = "two.sided")
+
+paste0(testBF, ", *p* = ", printnum(testFR$p.value))
+```
+
+
+## Preference
+
+*Which of these two people seemed happier to you?*
+
+[image left] [image right]
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+```{r, include=FALSE}
+pref_long <- df1 %>%
+  select(pref_rich, pref_imp) %>%
+  gather(key = "cond",
+         value = "pref",
+         c(pref_rich, pref_imp)) %>%
+  mutate(cond = ifelse(cond == "pref_rich", "rich", "imp")) %>%
+  mutate(cond = factor(cond, levels = c("rich", "imp")))
+```
+
+Preference was coded as -1 or +1 with the frequent option always being +1.  
+There was a general preference for the *frequent* option as seen here:
+
+```{r}
+pref_long %>%
+  group_by(cond) %>%
+  summarize(avg = mean(pref)) %>%
+  knitr::kable(caption = "Average preference", digits = 2) %>%
+  kable_styling(bootstrap_options = "hover", full_width = F, position = "center")
+```
+
+These, surprisingly, do not differ from one another:
+```{r, results='asis'}
+distr <- table(pref_long$cond, pref_long$pref)
+
+testBF <- proportionBF(y = distr["rich", "1"],
+                       N = distr["rich", "1"] + distr["rich", "-1"],
+                       p = distr["imp", "1"] / (distr["imp", "1"] + distr["imp", "-1"]),
+                       rscale = "ultrawide",
+                       nullInterval = c(0, 1)) %>%
+  printBFb(print = TRUE)
+testFR <- binom.test(x = distr["rich", "1"],
+                     n = distr["rich", "1"] + distr["rich", "-1"],
+                     p = distr["imp", "1"] / (distr["imp", "1"] + distr["imp", "-1"]),
+                     alternative = "two.sided")
+
+paste0(testBF, ", *p* = ", printnum(testFR$p.value))
+```
+
+But also do not differ meaningfully from 0:
+```{r, results='asis'}
+distr <- table(pref_long$pref)
+
+testBF <- proportionBF(y = distr["1"],
+                       N = distr["1"] + distr["-1"],
+                       p = .5,
+                       rscale = "ultrawide",
+                       nullInterval = c(.5, 1)) %>%
+  printBFb(print = TRUE)
+testFR <- binom.test(x = distr["1"],
+                     n = distr["1"] + distr["-1"],
+                     p = .5,
+                     alternative = "greater")
+
+paste0(testBF, ", *p* = ", printnum(testFR$p.value))
+```
+
+
+## Conditional estimates
+
+*On average, did this person smile or frown more often?*
+
+Left : Frown |----------| Smile  
+Right: Frown |----------| Smile  
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+```{r, include=FALSE}
+cond_long <- rbind(
+  df1 %>%
+    select(cond_rich_fr, cond_rich_in) %>%
+    gather(key = "frequency",
+           value = "value",
+           c(cond_rich_fr, cond_rich_in)) %>%
+    mutate(frequency = ifelse(frequency == "cond_rich_fr", "freq", "infr")) %>%
+    mutate(frequency = factor(frequency, levels = c("freq", "infr")),
+           cond = "rich"),
+  df1 %>%
+    select(cond_imp_fr, cond_imp_in) %>%
+    gather(key = "frequency",
+           value = "value",
+           c(cond_imp_fr, cond_imp_in)) %>%
+    mutate(frequency = ifelse(frequency == "cond_imp_fr", "freq", "infr")) %>%
+    mutate(frequency = factor(frequency, levels = c("freq", "infr")),
+           cond = "imp")
+) %>%
+  mutate(cond = factor(cond, levels = c("rich", "imp")))
+```
+
+Here (scale: 0 - 100) are the conditional estimates participants made:
+
+```{r}
+cond_long %>%
+  group_by(cond, frequency) %>%
+  summarize(avg = mean(value)) %>%
+  knitr::kable(caption = "Conditional estimates", digits = 2) %>%
+  kable_styling(bootstrap_options = "hover", full_width = F, position = "center")
+```
+
+```{r}
+cond_long %>%
+  ggplot(aes(x = cond,
+             y = value,
+             fill = frequency)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_apa()
+```
+
+These estimates result in the following &Delta;p-scores:
+```{r}
+df1 %>%
+  mutate(rich = (cond_rich_fr - cond_rich_in) / 100,
+         imp  = (cond_imp_fr - cond_imp_in) / 100) %>%
+  summarize(rich = mean(rich),
+            imp  = mean(imp)) %>%
+  knitr::kable(caption = "dp-scores", digits = 2) %>%
+  kable_styling(bootstrap_options = "hover", full_width = F, position = "center")
+```
+
+The two conditions do not differ from one another:
+```{r, results='asis'}
+df1 %>%
+  mutate(rich_dp = (cond_rich_fr - cond_rich_in) / 100,
+         imp_dp  = (cond_imp_fr - cond_imp_in) / 100) %$%
+  ttestBF(x = rich_dp,
+          y = imp_dp,
+          nullInterval = c(-Inf, Inf),
+          paired = TRUE) %>%
+  printBFt(print = TRUE)
+```
+
+This is surprising, as we would have expected smiling to be associated with the frequent person in the reward-rich condition, but with the infrequent person in the reward-impoverished condition.
+
+There is an overall difference from 0:
+```{r, results='asis'}
+df1 %>%
+  mutate(rich_dp = (cond_rich_fr - cond_rich_in) / 100,
+         imp_dp  = (cond_imp_fr - cond_imp_in) / 100) %>%
+  select(rich_dp, imp_dp) %>%
+  gather(key = "cond",
+         value = "dp") %$%
+  ttestBF(dp,
+          mu = 0,
+          nullInterval = c(0, Inf)) %>%
+  printBFt(print = TRUE)
+```
+
+
+## Demographic data
+
+Our participants:
+```{r}
+# Summary of most relevant demographic data
+df1 %>%
+  summarise(N = n(),
+            female = length(which(gender == "female")),
+            age_mean = mean(age, na.rm = TRUE),
+            age_sd = sd(age, na.rm = TRUE),
+            Psychstudents_percent = length(which(psych == "Yes")) / n() * 100) %>%
+  knitr::kable(caption = "Demographic data", digits = 2) %>%
+  kable_styling(bootstrap_options = "hover", full_width = F, position = "center")
+```
+
+And their level of education:
+```{r}
+# Level of education
+df1 %>%
+  group_by(edu) %>%
+  summarise(count = length(edu)) %>%
+  knitr::kable(caption = "Level of education", digits = 2) %>%
+  kable_styling(bootstrap_options = "hover", full_width = F, position = "center")
+```
+
+## Counterbalancing
+
+In this preliminary analyses I ignore gender (do we first show men or first show women), as well as which male/female individual is shown frequently and which is shown infrequently.
+
+The logic is as follows:  
+
+* Make the frequently shown face always the +1 (right) option  
+* Link with condition  
+
+And for the conditional estimates: 
+
+* Determine frequently and infrequently shown option  
+* Link with condition  
+
+```{r eval=FALSE}
+df %>%
+    # Ignore Order-Women and Order-Men. There should be no difference
+    #  2(condition: rich-imp vs. imp-rich, within)
+    # x2(primacy: left-right vs. right-left frequent)
+    # Preference
+    # 1: Frequent = 1, infrequent = -1
+    mutate(pref1_raw2 = ifelse(primacy == "left frequent", pref1_raw * (-1), pref1_raw),
+           freq1_raw2 = ifelse(primacy == "left frequent", freq1_raw * (-1), freq1_raw),
+           
+           pref2_raw2 = ifelse(primacy == "left frequent", pref2_raw,        pref2_raw * (-1)),
+           freq2_raw2 = ifelse(primacy == "left frequent", freq2_raw,        freq2_raw * (-1))) %>%
+    # 2: assign condition
+    mutate(pref_rich = ifelse(condition == "rich", pref1_raw2, pref2_raw2),
+           pref_imp  = ifelse(condition == "rich", pref2_raw2, pref1_raw2),
+           
+           freq_rich = ifelse(condition == "rich", freq1_raw2, freq2_raw2),
+           freq_imp  = ifelse(condition == "rich", freq2_raw2, freq1_raw2)) %>%
+    # Conditionals
+    # 1: frequently vs. infrequently shown
+    mutate(cond_first_freq = ifelse(primacy == "left frequent", cond1_raw, cond2_raw),
+           cond_first_infr = ifelse(primacy == "left frequent", cond2_raw, cond1_raw),
+           
+           cond_secon_freq = ifelse(primacy == "left frequent", cond4_raw, cond3_raw),
+           cond_secon_infr = ifelse(primacy == "left frequent", cond3_raw, cond4_raw)) %>%
+    # 2: assign condition
+    mutate(cond_rich_fr = ifelse(condition == "rich", cond_first_freq, cond_secon_freq),
+           cond_rich_in = ifelse(condition == "rich", cond_first_infr, cond_secon_infr),
+           
+           cond_imp_fr  = ifelse(condition == "rich", cond_secon_freq, cond_first_freq),
+           cond_imp_in  = ifelse(condition == "rich", cond_secon_infr, cond_first_infr))
+```
+
